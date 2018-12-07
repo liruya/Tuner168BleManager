@@ -5,6 +5,8 @@ import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGattCharacteristic;
+import android.bluetooth.le.ScanCallback;
+import android.bluetooth.le.ScanResult;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -57,6 +59,16 @@ public class BleManager extends BleCallBack implements ServiceConnection, Blueto
     private final int DATA_SEND_INTERVAL = 32;
 
     /**
+     * user BluetoothLeScanner to scan or not
+     */
+    private boolean mUseNewScanner;
+
+    /**
+     * BluetoothLeScanner callback
+     */
+    private ScanCallback mScanCallback;
+
+    /**
      * bluetooth scan period, default 15000ms
      */
     private int mScanPeriod = 12000;
@@ -65,7 +77,7 @@ public class BleManager extends BleCallBack implements ServiceConnection, Blueto
 
     private BleService mBleService;
 
-//        private ScanCallback mScanCallback;
+
 
     /**
      * set of connected devices, string:device mac address,boolean:data valid or not
@@ -92,8 +104,32 @@ public class BleManager extends BleCallBack implements ServiceConnection, Blueto
             public void run()
             {
                 stopScan();
+                if (mBleScanListeners != null) {
+                    for (BleScanListener listener : mBleScanListeners) {
+                        listener.onScanTimeout();
+                    }
+                }
             }
         };
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            mScanCallback = new ScanCallback() {
+                @Override
+                public void onScanResult(int callbackType, ScanResult result) {
+                    super.onScanResult(callbackType, result);
+                    onLeScan(result.getDevice(), result.getRssi(), result.getScanRecord().getBytes());
+                }
+
+                @Override
+                public void onBatchScanResults(List<ScanResult> results) {
+                    super.onBatchScanResults(results);
+                }
+
+                @Override
+                public void onScanFailed(int errorCode) {
+                    super.onScanFailed(errorCode);
+                }
+            };
+        }
         msc = System.currentTimeMillis();
     }
 
@@ -110,6 +146,16 @@ public class BleManager extends BleCallBack implements ServiceConnection, Blueto
     public void setScanPeriod(int scanPeriod)
     {
         mScanPeriod = scanPeriod;
+    }
+
+    public boolean isUseNewScanner() {
+        return mUseNewScanner;
+    }
+
+    public void setUseNewScanner(boolean useNewScanner) {
+        if (!mScanning) {
+            mUseNewScanner = useNewScanner;
+        }
     }
 
     /**
@@ -219,14 +265,13 @@ public class BleManager extends BleCallBack implements ServiceConnection, Blueto
         if (mScanning) {
             return;
         }
-        if (mBleScanListeners != null) {
-            for (BleScanListener listener : mBleScanListeners) {
-                listener.onStartScan();
-            }
-        }
-        BluetoothAdapter.getDefaultAdapter()
-                        .startLeScan(this);
         mScanning = true;
+        if (mUseNewScanner && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            BluetoothAdapter.getDefaultAdapter().getBluetoothLeScanner().startScan(mScanCallback);
+        } else {
+            BluetoothAdapter.getDefaultAdapter()
+                            .startLeScan(this);
+        }
         mHandler.postDelayed(mScanRunnable, mScanPeriod);
     }
 
@@ -236,15 +281,14 @@ public class BleManager extends BleCallBack implements ServiceConnection, Blueto
     public void stopScan()
     {
         if (mScanning) {
-            BluetoothAdapter.getDefaultAdapter()
-                            .stopLeScan(this);
-            mHandler.removeCallbacks(mScanRunnable);
             mScanning = false;
-            if (mBleScanListeners != null) {
-                for (BleScanListener listener : mBleScanListeners) {
-                    listener.onStopScan();
-                }
+            if (mUseNewScanner && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                BluetoothAdapter.getDefaultAdapter().getBluetoothLeScanner().stopScan(mScanCallback);
+            } else {
+                BluetoothAdapter.getDefaultAdapter()
+                                .stopLeScan(this);
             }
+            mHandler.removeCallbacks(mScanRunnable);
         }
     }
 

@@ -64,14 +64,7 @@ public class MainFragment extends BaseFragment {
 
         BleManager.getInstance().addBleScanListener(new BleScanListener() {
             @Override
-            public void onStartScan() {
-                if (main_swipe_refresh.isRefreshing() == false) {
-                    main_swipe_refresh.setRefreshing(true);
-                }
-            }
-
-            @Override
-            public void onStopScan() {
+            public void onScanTimeout() {
                 main_swipe_refresh.setRefreshing(false);
             }
 
@@ -103,7 +96,6 @@ public class MainFragment extends BaseFragment {
                 if (BleManager.getInstance().checkLocationPermission(getContext())) {
                     BleManager.getInstance().startScan();
                 } else {
-                    main_swipe_refresh.setRefreshing(false);
                     BleManager.getInstance().requestLocationPermission(getActivity(), 2);
                 }
             }
